@@ -10,8 +10,8 @@ package com.mycompany.mavenproject2;
  */
 public class NewClass {
      public static void main(String[] args) {
-      cataloge.infot(1);
-      cataloge.searcht("distributed systems");
+    //  cataloge.infot(1);
+      //cataloge.search("distributed systems");
  
      }
 }

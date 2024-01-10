@@ -10,19 +10,34 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import org.json.JSONArray;
 import static spark.Spark.*;
 import org.json.JSONObject;
 
 public class Mavenproject2 {
+    private static String[] catalogRep = {"3000", "3005"};
+    private static String[] orderRep = {"3003", "3004"};
+    private static int catalogIndex = 0;
+    private static int orderIndex = 0;
 
+   private static Map<String, JSONObject> cache = new HashMap<>();
+   
     public static void main(String[] args) {
  {
       port(8082);
        
-        
         get("CATALOG_WEBSERVICE_IP/info/:id", (req,res)->{
            String userId = req.params(":id");
+            System.out.println("userId :"+userId);
+                if (cache.containsKey("id_" + userId)) {
+                System.out.println("found in cache");
+                return cache.get("id_" + userId);
+            }
+                 System.out.println("not in cache");
+            catalogIndex = (catalogIndex >= catalogRep.length - 1) ? 0 : catalogIndex + 1;
+
            JSONObject userDetails = callinfo(userId);
                res.type("application/json");
             return userDetails.toString();
@@ -30,6 +45,13 @@ public class Mavenproject2 {
         
         get("CATALOG_WEBSERVICE_IP/search/:topic", (req,res)->{
             String topic = req.params(":topic");
+            
+            if (cache.containsKey("topic_" + topic)) {
+                System.out.println("found in cache");
+                return cache.get("topic_" + topic);}
+            System.out.println("not in cache");
+            catalogIndex = (catalogIndex >= catalogRep.length - 1) ? 0 : catalogIndex + 1;
+
             JSONArray searchResult = callSearch(topic);
             res.type("application/json");
              return new JSONArray(searchResult).toString();});
@@ -37,10 +59,26 @@ public class Mavenproject2 {
         
         ////ORDER_WEBSERVICE_IP/purchase/2
         put("order_webservice_ip/purchase/:id", (req,res)->{
-           String userId = req.params(":id");
-           String userDetails = callpurchase(userId);
+              String userId = req.params(":id");
+              int id = Integer.parseInt(userId); 
+              String userDetails ;
+              
+              
+              if (cache.containsKey("id_" + id)) {
+                cache.remove("id_" + id); 
+                userDetails = callpurchase(userId);   
+                catalogIndex = (catalogIndex >= catalogRep.length - 1) ? 0 : catalogIndex + 1;
+                JSONObject searchResult = callinfo2(userId);
+                cache.put("id_" + userId,searchResult);
+                System.out.println(cache.size());
+              }
+              else{
+            System.out.println("current cache size:" + cache.size());
+           userDetails = callpurchase(userId);}
             return userDetails;
         });
+        
+        
     }    }
  private static String callpurchase(String userId) {
          try {
@@ -70,7 +108,10 @@ public class Mavenproject2 {
     }
       
     }
-    private static JSONObject callinfo(String userId) {
+ 
+ 
+ private static JSONObject callinfo(String userId) {
+        JSONObject  responseBody;
          try {
            URL url = new URL("http://localhost:4567/CATALOG_WEBSERVICE_IP/info/" + userId);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -84,21 +125,24 @@ public class Mavenproject2 {
                 while ((line = reader.readLine()) != null) {
                     responseStringBuilder.append(line+"\n");
                 }
-                return new JSONObject(responseStringBuilder.toString());
+             responseBody = new JSONObject(responseStringBuilder.toString());
             }
         } else {
             // Handle error cases
             System.out.println("Error response code from Microservice info : " + responseCode);
-            return new JSONObject(); // or throw an exception, depending on your error handling strategy
+           responseBody = new JSONObject(); // or throw an exception, depending on your error handling strategy
         }
     } catch (Exception e) {
         e.printStackTrace();
-        return new JSONObject(); // or throw an exception
+       responseBody = new JSONObject(); // or throw an exception
     }
-      
-    }
-    
+     System.out.println("retrieved from db");
+    cache.put("id_" + userId,responseBody);
+    System.out.println(cache.size());
+    return   responseBody; 
+    }   
   private static JSONArray callSearch(String top) {
+       JSONArray  responseBody;
     try {
         String encodedTopic = URLEncoder.encode(top, StandardCharsets.UTF_8.toString());
         URL url = new URL("http://localhost:4567/CATALOG_WEBSERVICE_IP/search/" + encodedTopic);
@@ -114,21 +158,54 @@ public class Mavenproject2 {
                 while ((line = reader.readLine()) != null) {
                     responseStringBuilder.append(line);
                 }
-                
-                return new JSONArray(responseStringBuilder.toString());
-            }
+             responseBody = new JSONArray(responseStringBuilder.toString());
+}
         } else {
             // Handle error cases
             System.out.println("Error response code from Microservice search : " + responseCode);
-            return new JSONArray(); // or throw an exception, depending on your error handling strategy
+         responseBody = new JSONArray(); // or throw an exception, depending on your error handling strategy
         }
     } catch (Exception e) {
         e.printStackTrace();
-        return new JSONArray(); // or throw an exception
+     responseBody = new JSONArray(); // or throw an exception
     }
+    System.out.println("retrieved from db");
+    cache.put("topic_" + top, new JSONObject().put("data", responseBody));
+    System.out.println(cache.size());
+    return responseBody;
 }
 
+private static JSONObject callinfo2(String userId) {
+        JSONObject  responseBody;
+         try {
+           URL url = new URL("http://localhost:4567/CATALOG_WEBSERVICE_IP/info/" + userId);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            int responseCode = connection.getResponseCode();
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            // Read the response as JSON
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                StringBuilder responseStringBuilder = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    responseStringBuilder.append(line+"\n");
+                }
+             responseBody = new JSONObject(responseStringBuilder.toString());
+            }
+        } else {
+            // Handle error cases
+            System.out.println("Error response code from Microservice info : " + responseCode);
+           responseBody = new JSONObject(); // or throw an exception, depending on your error handling strategy
+        }
+    } catch (Exception e) {
+        e.printStackTrace();
+       responseBody = new JSONObject(); // or throw an exception
+    }
 
+    cache.put("id_" + userId,responseBody);
+    System.out.println(cache.size());
+    return   responseBody; 
+    }   
 
    
 }

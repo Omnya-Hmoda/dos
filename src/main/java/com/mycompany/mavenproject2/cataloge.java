@@ -50,6 +50,7 @@ public class cataloge {
                 user.put("message", "There is no topic like this.");
                 userDetailsList.add(user);
             }
+                   conn.close();
                  
         } 
         catch (SQLException e) {  
@@ -80,11 +81,12 @@ public class cataloge {
                  userDetails.put("price", rs.getInt("price"));
                      }
               else   userDetails.put("massege", "not find the id of the Book ");
-       
-       }
+                  conn.close();
+                 }
         catch (SQLException e) {  
             System.out.println(e.getMessage());  
         }
+         
       return userDetails;
     }  
 //------------------------------------------------------------------------------------------------------------------------
@@ -123,6 +125,7 @@ public class cataloge {
                
             } else {
                 return "the  book id is not found"; // Assuming 0 quantity if the book is not found
+                   
             }
       
             

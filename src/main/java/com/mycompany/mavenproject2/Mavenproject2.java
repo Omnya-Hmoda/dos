@@ -5,7 +5,9 @@
 package com.mycompany.mavenproject2;
 import com.google.gson.Gson;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
@@ -22,64 +24,84 @@ public class Mavenproject2 {
     private static int catalogIndex = 0;
     private static int orderIndex = 0;
 
-   private static Map<String, JSONObject> cache = new HashMap<>();
-   
-    public static void main(String[] args) {
- {
-      port(8082);
-       
-        get("CATALOG_WEBSERVICE_IP/info/:id", (req,res)->{
-           String userId = req.params(":id");
-            System.out.println("userId :"+userId);
-                if (cache.containsKey("id_" + userId)) {
-                System.out.println("found in cache");
-                return cache.get("id_" + userId);
-            }
-                 System.out.println("not in cache");
-            catalogIndex = (catalogIndex >= catalogRep.length - 1) ? 0 : catalogIndex + 1;
+    private static Map<String, JSONObject> cache = new HashMap<>();
 
-           JSONObject userDetails = callinfo(userId);
-               res.type("application/json");
+    public static void main(String[] args) {
+            port(8082);
+
+            get("CATALOG_WEBSERVICE_IP/info/:id", (req, res) -> {
+            String userId = req.params(":id");
+            JSONObject userDetails = callinfo(userId);
+            res.type("application/json");
+
+            // Notify replicas about the changes in the Catalog
+            replicateCatalogChanges(userDetails);
+
             return userDetails.toString();
         });
-        
-        get("CATALOG_WEBSERVICE_IP/search/:topic", (req,res)->{
-            String topic = req.params(":topic");
-            
-            if (cache.containsKey("topic_" + topic)) {
-                System.out.println("found in cache");
-                return cache.get("topic_" + topic);}
-            System.out.println("not in cache");
-            catalogIndex = (catalogIndex >= catalogRep.length - 1) ? 0 : catalogIndex + 1;
 
+            get("CATALOG_WEBSERVICE_IP/search/:topic", (req, res) -> {
+            String topic = req.params(":topic");
             JSONArray searchResult = callSearch(topic);
             res.type("application/json");
-             return new JSONArray(searchResult).toString();});
-        
-        
-        ////ORDER_WEBSERVICE_IP/purchase/2
-        put("order_webservice_ip/purchase/:id", (req,res)->{
-              String userId = req.params(":id");
-              int id = Integer.parseInt(userId); 
-              String userDetails ;
-              
-              
-              if (cache.containsKey("id_" + id)) {
-                cache.remove("id_" + id); 
-                userDetails = callpurchase(userId);   
-                catalogIndex = (catalogIndex >= catalogRep.length - 1) ? 0 : catalogIndex + 1;
-                JSONObject searchResult = callinfo2(userId);
-                cache.put("id_" + userId,searchResult);
-                System.out.println(cache.size());
-              }
-              else{
-            System.out.println("current cache size:" + cache.size());
-           userDetails = callpurchase(userId);}
+
+            // Notify replicas about the changes in the Catalog
+            replicateCatalogChanges(new JSONObject().put("action", "search").put("topic", topic));
+
+            return searchResult.toString();
+        });
+
+             put("order_webservice_ip/purchase/:id", (req, res) -> {
+            String userId = req.params(":id");
+            String userDetails = callpurchase(userId);
+            res.type("application/json");
+
+            // Notify replicas about the purchase in the Order service
+            replicateOrderChanges(new JSONObject().put("action", "purchase").put("userId", userId));
+
             return userDetails;
         });
-        
-        
-    }    }
+    }
+
+    private static void replicateCatalogChanges(JSONObject changes) {
+        for (String catalogReplica : catalogRep) {
+            replicateChanges(catalogReplica, "/replicateCatalog", changes);
+        }
+    }
+
+    private static void replicateOrderChanges(JSONObject changes) {
+        for (String orderReplica : orderRep) {
+            replicateChanges(orderReplica, "/replicateOrder", changes);
+        }
+    }
+
+    private static void replicateChanges(String replicaPort, String endpoint, JSONObject changes) {
+        try {
+            URL url = new URL("http://localhost:" + replicaPort + endpoint);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setDoOutput(true);
+
+            try (OutputStream os = connection.getOutputStream()) {
+                byte[] input = changes.toString().getBytes(StandardCharsets.UTF_8);
+                os.write(input, 0, input.length);
+            }
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                System.out.println("Error response code from replica: " + responseCode);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+      public static String[] getCatalogReplicas() {
+        return catalogRep;
+    }
+       public static String[] getOrderReplicas() {
+        return orderRep;
+    }
  private static String callpurchase(String userId) {
          try {
            URL url = new URL("http://localhost:4566/order_webservice_ip/purchase/" + userId);

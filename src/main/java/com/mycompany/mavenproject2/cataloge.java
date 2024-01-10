@@ -8,6 +8,7 @@ import java.util.List;
 import java.net.HttpURLConnection;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import org.json.JSONArray;
@@ -55,9 +56,12 @@ public class cataloge {
         } 
         catch (SQLException e) {  
             System.out.println(e.getMessage());  
+              
         }
-          return userDetailsList;
-       } 
+       replicateCatalogChanges(new JSONObject().put("action", "search").put("topic", top));
+
+        return userDetailsList;
+    }
     
     public static JSONObject info(int id){
       String sql = "SELECT * FROM book WHERE id='"+id+"'";
@@ -86,7 +90,8 @@ public class cataloge {
         catch (SQLException e) {  
             System.out.println(e.getMessage());  
         }
-         
+         replicateCatalogChanges(new JSONObject().put("action", "info").put("bookId", id));
+
       return userDetails;
     }  
 //------------------------------------------------------------------------------------------------------------------------
@@ -138,34 +143,75 @@ public class cataloge {
         catch (SQLException e) {  
             System.out.println(e.getMessage());  
         }
-         return "";}
+         //return "";
+     replicateCatalogChanges(new JSONObject().put("action", "decrease").put("bookId", id));
+
+        return res;
+     }
      
+     //*--------------------------------
+   private static void replicateCatalogChanges(JSONObject changes) {
+    for (String catalogReplica : Mavenproject2.getCatalogReplicas()) {
+        replicateChanges(catalogReplica, "/replicateCatalog", changes);
+    }
+}
+       
+       //---------------------
+       private static void replicateChanges(String replicaPort, String endpoint, JSONObject changes) {
+          try {
+            URL url = new URL("http://localhost:" + replicaPort + endpoint);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setDoOutput(true);
+
+            try (OutputStream os = connection.getOutputStream()) {
+                byte[] input = changes.toString().getBytes(StandardCharsets.UTF_8);
+                os.write(input, 0, input.length);
+            }
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                System.out.println("Error response code from replica: " + responseCode);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
      //------------------------------------------------------------------------------------------------------------
     public static void main(String[] args) {
         // Handle requests to get user details by ID
         port(4567);
-        get("CATALOG_WEBSERVICE_IP/info/:id", (req, res) -> {
-            int userId =Integer.parseInt(req.params(":id"));
+
+            get("CATALOG_WEBSERVICE_IP/info/:id", (req, res) -> {
+            int userId = Integer.parseInt(req.params(":id"));
             JSONObject userDetails = info(userId);
+            res.type("application/json");
             return userDetails.toString();
-        });    
-        
-         get("CATALOG_WEBSERVICE_IP/search/:top", (req, res) -> {
+        });
+
+            get("CATALOG_WEBSERVICE_IP/search/:top", (req, res) -> {
             String top = req.params(":top");
             String decodedTopic = URLDecoder.decode(top, StandardCharsets.UTF_8.toString());
             List<JSONObject> userDetailsList = search(decodedTopic);
-            // Set the response type to JSON
             res.type("application/json");
-            // Send the JSON array response back to the client
             return new JSONArray(userDetailsList).toString();
         });
-           put("order_webservice_ip/purchase/:id", (req, res) -> {
-            int userId =Integer.parseInt(req.params(":id"));
-            String userDetails = decrease(userId);
-            return userDetails;
-        });  
 
-}
+            put("order_webservice_ip/purchase/:id", (req, res) -> {
+            int userId = Integer.parseInt(req.params(":id"));
+            String userDetails = decrease(userId);
+            res.type("application/json");
+            return userDetails;
+        });
+
+            put("/replicateCatalog", (req, res) -> {
+            JSONObject replicatedChanges = new JSONObject(req.body());
+            // Apply changes to the local database or handle the replication as needed
+            // ...
+            return "Catalog Replication successful";
+        });
+    }
 
 }
  

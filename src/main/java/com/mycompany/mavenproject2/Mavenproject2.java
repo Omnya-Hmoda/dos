@@ -31,8 +31,14 @@ public class Mavenproject2 {
 
             get("CATALOG_WEBSERVICE_IP/info/:id", (req, res) -> {
             String userId = req.params(":id");
+            long startTime = System.nanoTime();
                if (cache.containsKey("id_" + userId)) {
+                long endTime = System.nanoTime();
+                long elapsedTime = endTime - startTime;
+
                 System.out.println("found in cache");
+                System.out.println("finding time = "+elapsedTime);
+
                 return cache.get("id_" + userId);
             }
                  System.out.println("not in cache");
@@ -41,18 +47,29 @@ public class Mavenproject2 {
 
             JSONObject userDetails = callinfo(userId);
             res.type("application/json");
+                long endTime = System.nanoTime();
+                long elapsedTime = endTime - startTime;
+                System.out.println("finding time = "+elapsedTime);
 
             // Notify replicas about the changes in the Catalog
             replicateCatalogChanges(userDetails);
-
+                
             return userDetails.toString();
         });
 
             get("CATALOG_WEBSERVICE_IP/search/:topic", (req, res) -> {
             String topic = req.params(":topic");
+             long startTime = System.nanoTime();
+
               if (cache.containsKey("topic_" + topic)) {
+                    long endTime = System.nanoTime();
+                long elapsedTime = endTime - startTime;
+                System.out.println("finding time = "+elapsedTime);
                 System.out.println("found in cache");
                 return cache.get("topic_" + topic);}
+                long endTime = System.nanoTime();
+                long elapsedTime = endTime - startTime;
+                System.out.println("finding time = "+elapsedTime);
             System.out.println("not found in cache");
             catalogIndex = (catalogIndex >= catalogRep.length - 1) ? 0 : catalogIndex + 1;
 
@@ -71,7 +88,11 @@ public class Mavenproject2 {
              int id = Integer.parseInt(userId); 
             String userDetails = callpurchase(userId);
             res.type("application/json");
+               long startTime = System.nanoTime();
                if (cache.containsKey("id_" + id)) {
+                     long endTime = System.nanoTime();
+                long elapsedTime = endTime - startTime;
+                System.out.println("finding time = "+elapsedTime);
                 cache.remove("id_" + id); 
                 userDetails = callpurchase(userId);   
                 catalogIndex = (catalogIndex >= catalogRep.length - 1) ? 0 : catalogIndex + 1;
@@ -80,6 +101,10 @@ public class Mavenproject2 {
                 System.out.println(cache.size());
               }
               else{
+                     long endTime = System.nanoTime();
+                long elapsedTime = endTime - startTime;
+                System.out.println("finding time = "+elapsedTime);
+
             System.out.println("current cache size:" + cache.size());
             userDetails = callpurchase(userId);}
             replicateOrderChanges(new JSONObject().put("action", "purchase").put("userId", userId));
